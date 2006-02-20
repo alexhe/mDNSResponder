@@ -23,9 +23,6 @@
     Change History (most recent first):
 
 $Log: mDNSMacOSX.h,v $
-Revision 1.52  2006/01/05 21:41:49  cheshire
-<rdar://problem/4108164> Reword "mach_absolute_time went backwards" dialog
-
 Revision 1.51  2005/07/04 22:24:36  cheshire
 Export NotifyOfElusiveBug() so other files can call it
 
@@ -261,7 +258,7 @@ struct mDNS_PlatformSupport_struct
     CFRunLoopSourceRef       PowerRLS;
     };
 
-extern void NotifyOfElusiveBug(const char *title, const char *msg);	// Both strings are UTF-8 text
+extern void NotifyOfElusiveBug(const char *title, mDNSu32 radarid, const char *msg);
 extern void mDNSMacOSXNetworkChanged(mDNS *const m);
 extern int mDNSMacOSXSystemBuildNumber(char *HINFO_SWstring);
 

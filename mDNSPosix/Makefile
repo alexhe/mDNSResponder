@@ -24,12 +24,6 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # $Log: Makefile,v $
-# Revision 1.66  2006/01/06 01:06:17  cheshire
-# <rdar://problem/3978979> Compile library and client programs in one pass
-#
-# Revision 1.65  2005/12/21 21:15:57  cheshire
-# Add missing dependency: Identify.c textually imports mDNS.c
-#
 # Revision 1.64  2005/10/25 23:55:47  cheshire
 # Add tiger to list of target platforms
 #
@@ -405,9 +399,9 @@ CFLAGS = $(CFLAGS_COMMON) $(CFLAGS_OS) $(CFLAGS_DEBUG)
 
 #############################################################################
 
-all: setup Daemon libdns_sd Clients SAClient SAResponder SAProxyResponder Identify NetMonitor dnsextd $(OPTIONALTARG)
+all: setup Daemon libdns_sd Client Responder ProxyResponder Identify NetMonitor dnsextd $(OPTIONALTARG)
 
-install: setup InstalledDaemon InstalledStartup InstalledLib InstalledManPages InstalledClients $(OPTINSTALL)
+install: setup InstalledDaemon InstalledLib InstalledStartup InstalledManPages $(OPTINSTALL)
 
 # 'setup' sets up the build directory structure the way we want
 setup:
@@ -418,9 +412,8 @@ setup:
 
 # clean removes targets and objects
 clean:
-	@if test -d $(OBJDIR)   ; then rm -r $(OBJDIR)   ; fi
-	@if test -d $(BUILDDIR) ; then rm -r $(BUILDDIR) ; fi
-	@$(MAKE) -C ../Clients clean
+	if test -d $(OBJDIR)   ; then rm -r $(OBJDIR)   ; fi
+	if test -d $(BUILDDIR) ; then rm -r $(BUILDDIR) ; fi
 
 #############################################################################
 
@@ -446,12 +439,6 @@ $(BUILDDIR)/libdns_sd.$(LDSUFFIX): $(CLIENTLIBOBJS)
 	@$(LD) $(LIBFLAGS) -o $@ $+
 	@$(STRIP) $@
 
-Clients: setup libdns_sd ../Clients/build/dns-sd
-	@echo "Clients done"
-
-../Clients/build/dns-sd:
-	@$(MAKE) -C ../Clients
-
 # nss_mdns target builds the Name Service Switch module
 nss_mdns: setup $(BUILDDIR)/$(NSSLIBFILE)
 	@echo "Name Service Switch module done"
@@ -472,18 +459,13 @@ InstalledLib: $(INSTBASE)/lib/libdns_sd.$(LDSUFFIX).$(LIBVERS) $(INSTBASE)/inclu
 InstalledStartup: $(STARTUPSCRIPTDIR)/$(STARTUPSCRIPTNAME)
 	@echo $+ " installed"
 
-InstalledManPages: $(MANPATH)/man8/mdnsd.8
-	@echo $+ " installed"
-
-InstalledClients: $(INSTBASE)/bin/dns-sd
-	@echo $+ " installed"
-
 InstalledNSS: $(NSSINSTPATH)/$(NSSLINKNAME) /etc/nss_mdns.conf $(MANPATH)/man5/nss_mdns.conf.5 $(MANPATH)/man8/libnss_mdns.8
 	@echo $+ " installed"
 
-# Note: If daemon already installed, we make sure it's stopped before overwriting it
+InstalledManPages: $(MANPATH)/man8/mdnsd.8
+	@echo $+ " installed"
+
 $(INSTBASE)/sbin/mdnsd: $(BUILDDIR)/mdnsd
-	@if test -x $@; then $(STARTUPSCRIPTDIR)/$(STARTUPSCRIPTNAME) stop; fi
 	$(CP) $< $@
 
 $(INSTBASE)/lib/libdns_sd.$(LDSUFFIX).$(LIBVERS): $(BUILDDIR)/libdns_sd.$(LDSUFFIX)
@@ -497,12 +479,9 @@ endif
 $(INSTBASE)/include/dns_sd.h: $(SHAREDDIR)/dns_sd.h
 	$(CP) $< $@
 
-# We make this target dependent on $(INSTBASE)/sbin/mdnsd because we need to ensure
-# that the daemon is installed *before* we try to execute the command to start it.
-$(STARTUPSCRIPTDIR)/$(STARTUPSCRIPTNAME): mdnsd.sh $(STARTUPSCRIPTDIR) $(INSTBASE)/sbin/mdnsd
+$(STARTUPSCRIPTDIR)/$(STARTUPSCRIPTNAME): mdnsd.sh $(STARTUPSCRIPTDIR)
 	$(CP) $< $@
 	chmod ugo+x $@
-	$@ start
 ifdef RUNLEVELSCRIPTSDIR
 ifeq ($(wildcard $(RUNLEVELSCRIPTSDIR)/runlevels/default), $(RUNLEVELSCRIPTSDIR)/runlevels/default)
 	$(LN) $@ $(RUNLEVELSCRIPTSDIR)/runlevels/default/mdns
@@ -515,21 +494,6 @@ else
 	$(LN) $@ $(RUNLEVELSCRIPTSDIR)/rc6.d/K16mdns
 endif
 endif
-
-$(MANPATH)/man5/%.5: %.5
-	cp $< $@
-	chmod 444 $@
-
-$(MANPATH)/man8/%.8: %.8
-	cp $< $@
-	chmod 444 $@
-
-$(MANPATH)/man8/mdnsd.8: $(SHAREDDIR)/mDNSResponder.8
-	cp $< $@
-	chmod 444 $@
-
-$(INSTBASE)/bin/dns-sd: ../Clients/build/dns-sd
-	$(CP) $< $@
 
 $(NSSINSTPATH)/$(NSSLINKNAME): $(NSSINSTPATH)/$(NSSLIBFILE)
 	$(LN) $< $@
@@ -546,6 +510,18 @@ $(NSSINSTPATH)/$(NSSLIBFILE): $(BUILDDIR)/$(NSSLIBFILE)
 	# If 'mdns' does not already appear on the "hosts:" line, then add it right before 'dns'
 	cp -f /etc/nsswitch.conf /etc/nsswitch.conf.pre-mdns
 	sed -e '/mdns/!s/^\(hosts:.*\)dns\(.*\)/\1mdns dns\2/' /etc/nsswitch.conf.pre-mdns > /etc/nsswitch.conf
+
+$(MANPATH)/man5/%.5: %.5
+	cp $< $@
+	chmod 444 $@
+
+$(MANPATH)/man8/%.8: %.8
+	cp $< $@
+	chmod 444 $@
+
+$(MANPATH)/man8/mdnsd.8: $(SHAREDDIR)/mDNSResponder.8
+	cp $< $@
+	chmod 444 $@
 
 #############################################################################
 
@@ -574,11 +550,11 @@ JARCONTENTS =	$(OBJDIR)/com/apple/dnssd/DNSSDService.class \
 				$(OBJDIR)/com/apple/dnssd/DomainListener.class \
 				$(OBJDIR)/com/apple/dnssd/DNSSD.class
 
-$(BUILDDIR)/dns_sd.jar: $(JARCONTENTS) setup
+$(BUILDDIR)/dns_sd.jar: $(JARCONTENTS)
 	$(JAR) -cf $@ -C $(OBJDIR) com
 
-$(BUILDDIR)/libjdns_sd.$(LDSUFFIX): $(JAVASRC)/JNISupport.c $(OBJDIR)/DNSSD.java.h setup libdns_sd
-	$(CC) -o $@ $< $(JAVACFLAGS) -I$(OBJDIR) -L$(BUILDDIR)
+$(BUILDDIR)/libjdns_sd.$(LDSUFFIX): $(JAVASRC)/JNISupport.c $(OBJDIR)/DNSSD.java.h
+	$(CC) -o $@ $< $(JAVACFLAGS) -I$(OBJDIR)
 
 $(OBJDIR)/com/apple/dnssd/%.class:	$(JAVASRC)/%.java
 	$(JAVAC) -d $(OBJDIR) -classpath $(OBJDIR) $<
@@ -597,7 +573,7 @@ $(OBJDIR)/DNSSD.java.h: $(OBJDIR)/com/apple/dnssd/DNSSD.class
 
 # The following target builds documentation for the Java wrappers.
 
-JavaDoc: Java setup
+JavaDoc: setup Java
 	$(JAVADOC) $(JAVASRC)/*.java -classpath $(OBJDIR) -d $(BUILDDIR) -public
 
 #############################################################################
@@ -607,13 +583,13 @@ SPECIALOBJ = $(OBJDIR)/mDNSPosix.c.o $(OBJDIR)/mDNSUNP.c.o $(OBJDIR)/mDNSDebug.c
 COMMONOBJ  = $(SPECIALOBJ) $(OBJDIR)/mDNS.c.o
 APPOBJ     = $(COMMONOBJ) $(OBJDIR)/ExampleClientApp.c.o
 
-SAClient: setup $(BUILDDIR)/mDNSClientPosix
+Client: setup $(BUILDDIR)/mDNSClientPosix
 	@echo "Embedded Standalone Client done"
 
-SAResponder: setup $(BUILDDIR)/mDNSResponderPosix
+Responder: setup $(BUILDDIR)/mDNSResponderPosix
 	@echo "Embedded Standalone Responder done"
 
-SAProxyResponder: setup $(BUILDDIR)/mDNSProxyResponderPosix
+ProxyResponder: setup $(BUILDDIR)/mDNSProxyResponderPosix
 	@echo "Embedded Standalone ProxyResponder done"
 
 Identify: setup $(BUILDDIR)/mDNSIdentify
@@ -636,8 +612,6 @@ $(BUILDDIR)/mDNSProxyResponderPosix: $(COMMONOBJ)  $(OBJDIR)/ProxyResponder.c.o
 
 $(BUILDDIR)/mDNSIdentify:            $(SPECIALOBJ) $(OBJDIR)/Identify.c.o
 	$(CC) $+ -o $@ $(LIBFLAGS)
-
-$(OBJDIR)/Identify.c.o:              $(COREDIR)/mDNS.c # Note: Identify.c textually imports mDNS.c
 
 $(BUILDDIR)/mDNSNetMonitor:          $(SPECIALOBJ) $(OBJDIR)/NetMonitor.c.o
 	$(CC) $+ -o $@ $(LIBFLAGS)

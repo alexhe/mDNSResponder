@@ -24,6 +24,10 @@
     Change History (most recent first):
 
 $Log: LegacyNATTraversal.c,v $
+Revision 1.14.2.1  2005/12/12 17:38:40  cheshire
+Put buffer overflow bug 4151514 back in by order of Program CCC:
+"Program CCC Denied.  This change does not meet the criteria for Chardonnay."
+
 Revision 1.14  2005/12/08 03:00:33  cheshire
 <rdar://problem/4349971> Byte order bugs in Legacy NAT traversal code
 
@@ -1523,7 +1527,7 @@ static void *UDPProc(void *in)
 
 		if (!FD_ISSET(g_sUDP, &readfds)) continue;
 		recvaddrlen = sizeof(recvaddr);
-		n = recvfrom(g_sUDP, buf, sizeof(buf)-1, 0,
+		n = recvfrom(g_sUDP, buf, sizeof(buf), 0, // ### !!! Buffer overflow !!! Should be sizeof(buf)-1 to allow for "buf[n] = '\0';" below !!!
 			(struct sockaddr *)&recvaddr, &recvaddrlen);
 		if (n < 0) {
 			if (g_fLogging & NALOG_ERROR)

@@ -20,9 +20,6 @@
 # @APPLE_LICENSE_HEADER_END@
 #
 # $Log: Makefile,v $
-# Revision 1.7  2006/01/06 01:06:17  cheshire
-# <rdar://problem/3978979> Compile library and client programs in one pass
-#
 # Revision 1.6  2004/09/24 21:15:26  cheshire
 # <rdar://problem/3724985> Library "libmdns" misnamed; should be "libdns_sd"
 #
@@ -51,12 +48,12 @@
 
 #############################################################################
 
-# On OS X the dns_sd library functions are included in libSystem, which is implicitly linked with every executable
-# If /usr/lib/libSystem.dylib exists, then we're on OS X, so we don't need also to link the "dns_sd" shared library
-ifneq "$(wildcard /usr/lib/libSystem.dylib)" ""
-LIBS =
+
+# If library /usr/lib/libdns_sd.* exists, then link it
+ifneq "$(wildcard /usr/lib/libdns_sd.*)" ""
+LIBS = -ldns_sd
 else
-LIBS = -L../mDNSPosix/build/prod/ -ldns_sd
+LIBS =
 endif
 
 targets: build/dns-sd
